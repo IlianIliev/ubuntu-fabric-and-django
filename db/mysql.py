@@ -1,8 +1,9 @@
+""" Fabric task for MySQL. Have in note that this is Debian specific."""
 from fabric.api import local, run, sudo, env
 from fabric.context_managers import settings, hide
 from fabric.utils import warn
 
-from db import DB_CREDENTIALS_INFO_MESSAGE
+from db import DBTypeBase, DB_CREDENTIALS_INFO_MESSAGE
 from utils import generate_password, add_os_package
 
 
@@ -15,6 +16,17 @@ MYSQL_RUN_COMMAND = '%s --defaults-file=%s' % (MYSQL_EXECUTABLE_PATH,
 
 CREATE_DB_QUERY = """echo 'create database %s default character set utf8 collate utf8_general_ci'"""
 CREATE_USER_QUERY = """echo 'grant all privileges on %s.* to %s@localhost identified by "%s"'"""
+
+
+class DBType(DBTypeBase):
+    def create_db(self, name):
+        """ Creates database with given name """
+        sudo('%s | %s' % (CREATE_DB_QUERY, MYSQL_RUN_COMMAND) % name)
+    
+    def create_db_and_user(self, name):
+        """ Creates database and user with the same name """
+        self.create_db(name)
+        self.create_user_for_db(name, name)
 
 
 def setup_db_server():
@@ -37,11 +49,6 @@ def setup_db_server():
     local('echo "%s" >> passwords' % db_setup_info)
 
 
-def create_db(name):
-    """ Creates database with given name """
-    sudo('%s | %s' % (CREATE_DB_QUERY, MYSQL_RUN_COMMAND) % name)
-
-
 def create_user_for_db(username, dbname):
     """ Creates user with given name and grans them full permission on specified base """
     password = generate_password()
@@ -53,7 +60,3 @@ def create_user_for_db(username, dbname):
     local('echo "%s" >> passwords' % db_info)
 
 
-def create_db_and_user(name):
-    """ Creates database and user with the same name """
-    create_db(name)
-    create_user_for_db(name, name)

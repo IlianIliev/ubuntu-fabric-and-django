@@ -3,8 +3,8 @@ import re, sys, os, inspect
 from fabric.api import local, run, sudo, prompt
 from fabric.context_managers import lcd, prefix
 
-from db import select_db_engine
-from db.mysql import setup_db_server, create_db_and_user
+from db import select_db_type
+#from db.mysql import setup_db_server, create_db_and_user
 
 from utils import generate_password, add_os_package
 
@@ -81,7 +81,9 @@ def setup_server():
 
 
 def setup_db(name):
-    select_db_engine()
+    db_type_class = select_db_type()
+    db_type = db_type_class(local_run=True)
+    db_type.create_db_and_user(name)
     return
     text = ['Before setting up database you must select its type']
     [text.append('%s [%s]' % pair) for pair in AVAILABLE_DB_MODULES]
