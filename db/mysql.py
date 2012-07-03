@@ -1,6 +1,7 @@
 """ Fabric task for MySQL. Have in note that this is Debian specific."""
-from fabric.api import local, run, sudo, env
+from fabric.api import local, run, sudo, env, prompt
 from fabric.context_managers import settings, hide
+from fabric.contrib.files import exists
 from fabric.utils import warn
 
 from db import DBTypeBase, DB_CREDENTIALS_INFO_MESSAGE
@@ -19,6 +20,11 @@ CREATE_USER_QUERY = """echo 'grant all privileges on %s.* to %s@localhost identi
 
 
 class DBType(DBTypeBase):
+    def is_db_installed(self):
+        if exists(MYSQL_EXECUTABLE_PATH):
+            return True
+        return False
+
     def create_db(self, name):
         """ Creates database with given name """
         sudo('%s | %s' % (CREATE_DB_QUERY, MYSQL_RUN_COMMAND) % name)

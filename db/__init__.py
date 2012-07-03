@@ -6,6 +6,7 @@ AVAILABLE_DB_MODULES = [
     'PostgreSQL',
 ]
 
+
 DB_CREDENTIALS_INFO_MESSAGE = ("""Database credentials\n"""
     """Host: %s \n"""
     """DB name: %s \n"""
@@ -13,10 +14,14 @@ DB_CREDENTIALS_INFO_MESSAGE = ("""Database credentials\n"""
     """Password: %s \n""")
 
 
-
 class DBTypeBase(object):
-    def __init__(self, local_run=False):
-        self.run = local if local_run else sudo
+    
+    #def __init__(self, check_instal=False): 
+    #    if check_instal:
+    #        self.check_installation()
+
+    def check_installation(self):
+        raise NotImplementedError
 
     def create_user(*args, **kwargs):
         raise NotImplementedError

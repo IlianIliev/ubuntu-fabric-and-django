@@ -63,10 +63,16 @@ def startproject(name=None):
         local('cp %s .' % os.path.join(FABFILE_LOCATION, 'required_packages.txt'))
         ve_activate_prefix = os.path.join(os.getcwd(), name, 'bin', 'activate')
         with prefix('. %s' % ve_activate_prefix):
-            install_packages()
-            create_django_project(name)
-            with select_db_engine as db_engine:
+            #install_packages()
+            #create_django_project(name)
+            db_type = select_db_type()()
+            if not db_type.is_db_installed():
+                    print 'Database executable not found. Skipping DB creation part'
+                    print 1/0
+            else:
+                print 1/0
                 create_db_and_user(name, local=True)
+            return
             update_settings()
             copy_fabfiles()
             manage_py_path = os.path.join(SOURCE_DIRECTORY_NAME, 'manage.py')
@@ -82,7 +88,7 @@ def setup_server():
 
 def setup_db(name):
     db_type_class = select_db_type()
-    db_type = db_type_class(local_run=True)
+    db_type = db_type_class()
     db_type.create_db_and_user(name)
     return
     text = ['Before setting up database you must select its type']
