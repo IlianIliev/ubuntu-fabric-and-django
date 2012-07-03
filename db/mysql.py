@@ -20,6 +20,10 @@ CREATE_USER_QUERY = """echo 'grant all privileges on %s.* to %s@localhost identi
 
 
 class DBType(DBTypeBase):
+    def __init__(self, *args, **kwargs):
+        self.engine = 'mysql'
+        self.executable_path = MYSQL_EXECUTABLE_PATH
+
     def is_db_installed(self):
         if exists(MYSQL_EXECUTABLE_PATH):
             return True
@@ -28,11 +32,18 @@ class DBType(DBTypeBase):
     def create_db(self, name):
         """ Creates database with given name """
         sudo('%s | %s' % (CREATE_DB_QUERY, MYSQL_RUN_COMMAND) % name)
-    
+
+    def create_user_for_db(self, dbname, username, password=None):
+        if not password:
+            password = generate_password()
+        sudo('%s | %s' % (CREATE_USER_QUERY, MYSQL_RUN_COMMAND) %
+             (dbname, username, password))
+        return password
+
     def create_db_and_user(self, name):
         """ Creates database and user with the same name """
         self.create_db(name)
-        self.create_user_for_db(name, name)
+        return self.create_user_for_db(name, name)
 
 
 def setup_db_server():

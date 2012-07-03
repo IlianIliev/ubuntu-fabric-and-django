@@ -27,6 +27,20 @@ REQUIRED_SYSTEM_PACKAGES = [
 ]
 
 
+DJANGO_DB_CONF = """
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.%s', # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
+        'NAME': '%s',                      # Or path to database file if using sqlite3.
+        'USER': '%s',                      # Not used with sqlite3.
+        'PASSWORD': '%s',                  # Not used with sqlite3.
+        'HOST': '%s',                      # Set to empty string for localhost. Not used with sqlite3.
+        'PORT': '%s',                      # Set to empty string for default. Not used with sqlite3.
+    }
+}
+"""
+
+
 # Start project part
 def create_virtual_env():
     local('virtualenv --no-site-packages .')
@@ -55,6 +69,15 @@ def create_django_project(name):
     local('python ./bin/django-admin.py startproject --template "%s" %s %s' % (os.path.join(FABFILE_LOCATION, 'project_template/'), name, SOURCE_DIRECTORY_NAME))
 
 
+def generate_django_db_config(engine='', name='', user='', password='',
+                              host='', port=''):
+    return DJANGO_DB_CONF % (engine, name, user, password, host, port)
+
+
+def create_nginx_files():
+    pass
+
+
 def startproject(name=None):
     create_project_directory(name)
     
@@ -63,22 +86,26 @@ def startproject(name=None):
         local('cp %s .' % os.path.join(FABFILE_LOCATION, 'required_packages.txt'))
         ve_activate_prefix = os.path.join(os.getcwd(), name, 'bin', 'activate')
         with prefix('. %s' % ve_activate_prefix):
-            #install_packages()
-            #create_django_project(name)
+            install_packages()
+            create_django_project(name)
+            create_nginx_files()
             db_type = select_db_type()()
-            if not db_type.is_db_installed():
-                    print 'Database executable not found. Skipping DB creation part'
-                    print 1/0
+            if not os.path.exists(db_type.executable_path):
+                print 'Database executable not found. Skipping DB creation part'
+                djang_db_config = generate_django_db_config(db_type.engine)
             else:
-                print 1/0
-                create_db_and_user(name, local=True)
-            return
-            update_settings()
-            copy_fabfiles()
+                password = db_type.create_db_and_user(name)
+                djang_db_config = generate_django_db_config(db_type.engine,
+                                                            name, name, password)
+            local('echo "%s" >> %s' % (djang_db_config,
+                                       os.path.join(SOURCE_DIRECTORY_NAME,
+                                                    name, 'settings',
+                                                    'local.py')))
+
             manage_py_path = os.path.join(SOURCE_DIRECTORY_NAME, 'manage.py')
             local('python %s collectstatic' % manage_py_path)
 
-
+"""
 # Server setup
 def setup_server():
     # install system packages
@@ -99,3 +126,4 @@ def setup_db(name):
     db_package = __import__('db.%s' % db_package_name, fromlist=['create_db_and_user'])
     db_package.create_db_and_user(name)
 
+"""
