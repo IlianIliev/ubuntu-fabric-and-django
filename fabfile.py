@@ -74,8 +74,15 @@ def generate_django_db_config(engine='', name='', user='', password='',
     return DJANGO_DB_CONF % (engine, name, user, password, host, port)
 
 
-def create_nginx_files():
-    pass
+def create_nginx_files(project_name, project_path):
+    with file(os.path.join(FABFILE_LOCATION, 'nginx.local.conf')) as nginx_local_template:
+        nginx_local_content = nginx_local_template.read()
+    nginx_local_content = nginx_local_content.replace('%%%project_name%%%',
+                                                      project_name).\
+                                              replace('%%%project_path%%%',
+                                                      project_path)
+    with file(os.path.join(project_path, '%s.nginx.local.conf' % project_name), 'w+') as project_nginx_local:
+        project_nginx_local.write(nginx_local_content)
 
 
 def startproject(name=None):
@@ -88,7 +95,8 @@ def startproject(name=None):
         with prefix('. %s' % ve_activate_prefix):
             install_packages()
             create_django_project(name)
-            create_nginx_files()
+            create_nginx_files(name, os.path.abspath(name))
+            return
             db_type = select_db_type()()
             if not os.path.exists(db_type.executable_path):
                 print 'Database executable not found. Skipping DB creation part'
