@@ -3,7 +3,7 @@ from fabric.api import prompt, local, sudo
 
 AVAILABLE_DB_MODULES = [
     'MySQL',
-    'PostgreSQL',
+#    'PostgreSQL',
 ]
 
 

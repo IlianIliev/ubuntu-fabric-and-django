@@ -88,21 +88,29 @@ def startproject(name=None):
         with prefix('. %s' % ve_activate_prefix):
             install_packages()
             create_django_project(name)
+            manage_py_path = os.path.join(SOURCE_DIRECTORY_NAME, 'manage.py')
+            local_settings_path = os.path.join(SOURCE_DIRECTORY_NAME, name,
+                                               'settings', 'local.py')
             create_nginx_files()
             db_type = select_db_type()()
             if not os.path.exists(db_type.executable_path):
                 print 'Database executable not found. Skipping DB creation part'
                 djang_db_config = generate_django_db_config(db_type.engine)
+                local('echo "%s" >> %s' % (djang_db_config, local_settings_path))
             else:
+                installed_packages = file(os.path.join(os.getcwd(), name, 'required_packages.txt')).read()
+                package_list_updated = False
+                for package in db_type.required_packages:
+                    if package not in installed_packages:
+                        local('echo "%s" >> required_packages.txt' % package)
+                        package_list_updated = True
+                if package_list_updated:
+                    install_packages()
                 password = db_type.create_db_and_user(name)
                 djang_db_config = generate_django_db_config(db_type.engine,
                                                             name, name, password)
-            local('echo "%s" >> %s' % (djang_db_config,
-                                       os.path.join(SOURCE_DIRECTORY_NAME,
-                                                    name, 'settings',
-                                                    'local.py')))
-
-            manage_py_path = os.path.join(SOURCE_DIRECTORY_NAME, 'manage.py')
+                local('echo "%s" >> %s' % (djang_db_config, local_settings_path))
+                local('python %s syncdb' % manage_py_path)
             local('python %s collectstatic' % manage_py_path)
 
 """

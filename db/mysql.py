@@ -22,6 +22,7 @@ CREATE_USER_QUERY = """echo 'grant all privileges on %s.* to %s@localhost identi
 class DBType(DBTypeBase):
     def __init__(self, *args, **kwargs):
         self.engine = 'mysql'
+        self.required_packages = ['MySQL-python']
         self.executable_path = MYSQL_EXECUTABLE_PATH
 
     def is_db_installed(self):
