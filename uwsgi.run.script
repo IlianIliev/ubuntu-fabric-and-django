@@ -1,0 +1,13 @@
+uwsgi --chdir=%%%project_path%%%
+    --module=%%%project_name%%%.wsgi:application \
+    --env DJANGO_SETTINGS_MODULE=%%%project_name%%%.settings \
+    --master --pidfile=/tmp/project-master.pid \
+    --socket=127.0.0.1:8001 \      # can also be a file
+    --processes=5 \                 # number of worker processes
+    --uid=1000 --gid=2000 \         # if root, uwsgi can drop privileges
+    --harakiri=20 \                 # respawn processes taking more than 20 seconds
+    --limit-as=128 \                # limit the project to 128 MB
+    --max-requests=5000 \           # respawn processes after serving 5000 requests
+    --vacuum \                      # clear environment on exit
+    --home=%%%project_path%%% \   # optional path to a virtualenv
+    --daemonize=/var/log/uwsgi/yourproject.log      # background the process

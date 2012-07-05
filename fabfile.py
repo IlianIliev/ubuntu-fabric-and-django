@@ -46,8 +46,8 @@ def create_virtual_env():
     local('virtualenv --no-site-packages .')
 
 
-def install_packages():
-    local('pip install -r required_packages.txt')
+def install_packages(packages_file):
+    local('pip install -r %s' % packages_file)
 
 
 def create_project_directory(name):
@@ -63,11 +63,11 @@ def create_project_directory(name):
 
 
 def create_django_project(name):
-    local('mkdir %s' % SOURCE_DIRECTORY_NAME)
     with lcd(SOURCE_DIRECTORY_NAME):
         local('mkdir static')
         local('mkdir media')
-        local('python ../bin/django-admin.py startproject --template "%s" %s' % (os.path.join(FABFILE_LOCATION, 'project_template/'), name))
+        local('python ../bin/django-admin.py startproject --template "%s" %s' %
+              (os.path.join(FABFILE_LOCATION, 'project_template/'), name))
 
 
 def generate_django_db_config(engine='', name='', user='', password='',
@@ -76,13 +76,15 @@ def generate_django_db_config(engine='', name='', user='', password='',
 
 
 def create_nginx_files(project_name, project_path):
-    with file(os.path.join(FABFILE_LOCATION, 'nginx.local.conf')) as nginx_local_template:
+    with file(os.path.join(FABFILE_LOCATION, 'nginx.local.conf')
+              ) as nginx_local_template:
         nginx_local_content = nginx_local_template.read()
     nginx_local_content = nginx_local_content.replace('%%%project_name%%%',
                                                       project_name).\
                                               replace('%%%project_path%%%',
                                                       project_path)
-    with file(os.path.join(project_path, '%s.nginx.local.conf' % project_name), 'w+') as project_nginx_local:
+    with file(os.path.join(project_path, '%s.nginx.local.conf' % project_name),
+              'w+') as project_nginx_local:
         project_nginx_local.write(nginx_local_content)
 
 
@@ -91,33 +93,45 @@ def startproject(name=None):
     
     with lcd(name):
         create_virtual_env()
-        local('cp %s .' % os.path.join(FABFILE_LOCATION, 'required_packages.txt'))
         ve_activate_prefix = os.path.join(os.getcwd(), name, 'bin', 'activate')
         with prefix('. %s' % ve_activate_prefix):
-            install_packages()
+            local('mkdir %s' % SOURCE_DIRECTORY_NAME)
+            packages_file = os.path.abspath(os.path.join(
+                                                name,
+                                                SOURCE_DIRECTORY_NAME,
+                                                'required_packages.txt'))
+            local('cp %s %s' % (os.path.join(FABFILE_LOCATION,
+                                             'required_packages.txt'),
+                                packages_file))
+            install_packages(packages_file)
             create_django_project(name)
-            create_nginx_files(name, os.path.abspath(name))
-            manage_py_path = os.path.join(SOURCE_DIRECTORY_NAME, name,
-                                          'manage.py')
-            local_settings_path = os.path.join(SOURCE_DIRECTORY_NAME, name,
-                                               name, 'settings', 'local.py')
+            src_path = os.path.abspath(os.path.join(name,
+                                                    SOURCE_DIRECTORY_NAME))
+
+            create_nginx_files(name, src_path)
+
+            manage_py_path = os.path.join(src_path, name, 'manage.py')
+            local_settings_path = os.path.join(src_path, name, name, 'settings',
+                                               'local.py')
             db_type = select_db_type()()
             if not os.path.exists(db_type.executable_path):
                 print 'Database executable not found. Skipping DB creation part'
                 djang_db_config = generate_django_db_config(db_type.engine)
-                local('echo "%s" >> %s' % (djang_db_config, local_settings_path))
+                local('echo "%s" >> %s' % (djang_db_config,
+                                           local_settings_path))
             else:
-                installed_packages = file(os.path.join(os.getcwd(), name, 'required_packages.txt')).read()
+                installed_packages = file(packages_file).read()
                 package_list_updated = False
                 for package in db_type.required_packages:
                     if package not in installed_packages:
-                        local('echo "%s" >> required_packages.txt' % package)
+                        local('echo "%s" >> %s' % (package, packages_file))
                         package_list_updated = True
                 if package_list_updated:
-                    install_packages()
+                    install_packages(packages_file)
                 password = db_type.create_db_and_user(name)
                 djang_db_config = generate_django_db_config(db_type.engine,
-                                                            name, name, password)
+                                                            name, name,
+                                                            password)
                 local('echo "%s" >> %s' % (djang_db_config, local_settings_path))
                 local('python %s syncdb' % manage_py_path)
             local('python %s collectstatic' % manage_py_path)
@@ -143,4 +157,18 @@ def setup_db(name):
     db_package = __import__('db.%s' % db_package_name, fromlist=['create_db_and_user'])
     db_package.create_db_and_user(name)
 
+
+def update_project():
+    # git pull origin master
+    # copy server files
+    # sync db
+    # collect static files
+    # reload nginx config
+    # restart uwsgi server
+
+
+def deploy(git_repo):
+    # create virtual env 
+    # git add origin git_repo
+    update_project()
 """
