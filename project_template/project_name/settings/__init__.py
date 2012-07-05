@@ -2,7 +2,7 @@
 import os
 
 
-PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 ADMINS = (
     # ('Your Name', 'your_email@example.com'),
