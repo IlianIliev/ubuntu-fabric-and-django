@@ -1,9 +1,9 @@
 from fabric.api import prompt, local, sudo
-
+from fabric.contrib.files import exists
 
 AVAILABLE_DB_MODULES = [
-    'MySQL',
-#    'PostgreSQL',
+#    'MySQL',
+    'PostgreSQL',
 ]
 
 
@@ -15,11 +15,6 @@ DB_CREDENTIALS_INFO_MESSAGE = ("""Database credentials\n"""
 
 
 class DBTypeBase(object):
-    
-    #def __init__(self, check_instal=False): 
-    #    if check_instal:
-    #        self.check_installation()
-
     def check_installation(self):
         raise NotImplementedError
 
@@ -31,6 +26,11 @@ class DBTypeBase(object):
 
     def create_db_and_user(*args, **kwargs):
         raise NotImplementedError
+
+    def is_db_installed(self):
+        if exists(self.executable_path):
+            return True
+        return False
 
 
 def select_db_type():

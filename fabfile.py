@@ -41,33 +41,40 @@ DATABASES = {
 """
 
 
+def check_project_name(name):
+    # this check is copied from the Dajngo core code, as we are running it
+    # before the creation of VE the existing module check is skipped
+    if not re.search(r'^[_a-zA-Z]\w*$', name):
+        # Provide a smart error message, depending on the error.
+        if not re.search(r'^[_a-zA-Z]', name):
+            message = ('make sure the name begins '
+                       'with a letter or underscore')
+        else:
+            message = 'use only numbers, letters and underscores'
+        return False, ("%r is not a valid project name. Please %s." %
+                           (name, message))
+    if os.path.exists(name):
+        message = ('Project with such name already exists.')
+        return False, message
+    return True, ''
+
+
 # Start project part
-def create_virtual_env():
-    local('virtualenv --no-site-packages .')
+def ve_activate_prefix(name):
+    return os.path.join(os.getcwd(), name, 'bin', 'activate')
 
 
-def install_packages(packages_file):
-    local('pip install -r %s' % packages_file)
+def create_virtual_env(name='.'):
+    local('virtualenv --no-site-packages %s' % name)
 
 
-def create_project_directory(name):
-    if name is None:
-	print 'You should provide project name to use this script'
-        sys.exit()
-    if not re.match(DIRECTORY_NAME_REGEXP, name):
-        print 'Incorrect name, name can contain only numbers, letters, dash ' \
-            'and underscore and should start with letter or underscore'
-        exit(1)
-    else:
-        local('mkdir %s' % name)
-
-
-def create_django_project(name):
-    with lcd(SOURCE_DIRECTORY_NAME):
-        local('mkdir static')
-        local('mkdir media')
-        local('python ../bin/django-admin.py startproject --template "%s" %s' %
-              (os.path.join(FABFILE_LOCATION, 'project_template/'), name))
+def create_django_project(name, dest_path=''):
+    local('python ./bin/django-admin.py startproject --template "%s" %s %s' % (
+            os.path.join(FABFILE_LOCATION, 'project_template/'),
+            name,
+            dest_path))
+    local('mkdir %s' % os.path.join(dest_path, 'static'))
+    local('mkdir %s' % os.path.join(dest_path, 'media'))
 
 
 def generate_django_db_config(engine='', name='', user='', password='',
@@ -88,32 +95,31 @@ def create_nginx_files(project_name, project_path):
         project_nginx_local.write(nginx_local_content)
 
 
-def startproject(name=None):
-    create_project_directory(name)
-    
+def startproject(name):
+    check, message = check_project_name(name)
+    if not check:
+        print message
+        exit(1)
+    create_virtual_env(name)
+    source_path = os.path.abspath(os.path.join(name, SOURCE_DIRECTORY_NAME))
+    local('mkdir %s' % source_path)
     with lcd(name):
-        create_virtual_env()
-        ve_activate_prefix = os.path.join(os.getcwd(), name, 'bin', 'activate')
-        with prefix('. %s' % ve_activate_prefix):
-            local('mkdir %s' % SOURCE_DIRECTORY_NAME)
-            packages_file = os.path.abspath(os.path.join(
-                                                name,
-                                                SOURCE_DIRECTORY_NAME,
-                                                'required_packages.txt'))
+        with prefix('. %s' % ve_activate_prefix(name)):
+            packages_file = os.path.join(source_path,
+                                         'required_packages.txt')
             local('cp %s %s' % (os.path.join(FABFILE_LOCATION,
                                              'required_packages.txt'),
                                 packages_file))
-            install_packages(packages_file)
-            create_django_project(name)
-            src_path = os.path.abspath(os.path.join(name,
-                                                    SOURCE_DIRECTORY_NAME))
-
-            create_nginx_files(name, src_path)
-
-            manage_py_path = os.path.join(src_path, name, 'manage.py')
-            local_settings_path = os.path.join(src_path, name, name, 'settings',
+            local('pip install -r %s' % packages_file)
+            project_root = os.path.join(source_path, name)
+            local('mkdir %s' % project_root)
+            create_django_project(name, project_root)
+            #create_nginx_files(name, source_path)
+            manage_py_path = os.path.join(source_path, name, 'manage.py')
+            local_settings_path = os.path.join(source_path, name, name, 'settings',
                                                'local.py')
-            db_type = select_db_type()()
+            db_type_class = select_db_type()
+            db_type = db_type_class()
             if not os.path.exists(db_type.executable_path):
                 print 'Database executable not found. Skipping DB creation part'
                 djang_db_config = generate_django_db_config(db_type.engine)
@@ -127,13 +133,14 @@ def startproject(name=None):
                         local('echo "%s" >> %s' % (package, packages_file))
                         package_list_updated = True
                 if package_list_updated:
-                    install_packages(packages_file)
+                    local('pip install -r %s' % packages_file)
                 password = db_type.create_db_and_user(name)
                 djang_db_config = generate_django_db_config(db_type.engine,
                                                             name, name,
                                                             password)
                 local('echo "%s" >> %s' % (djang_db_config, local_settings_path))
                 local('python %s syncdb' % manage_py_path)
+            return
             local('python %s collectstatic' % manage_py_path)
 
 """
@@ -172,3 +179,10 @@ def deploy(git_repo):
     # git add origin git_repo
     update_project()
 """
+
+def arg_test(a, b=None, c=None):
+    print a, b, c
+
+def test2():
+    import sys
+    print sys.real_prefix
