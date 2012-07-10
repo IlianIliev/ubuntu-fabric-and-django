@@ -121,9 +121,9 @@ def startproject(name):
             db_type_class = select_db_type()
             db_type = db_type_class()
             if not os.path.exists(db_type.executable_path):
-                print 'Database executable not found. Skipping DB creation part'
-                djang_db_config = generate_django_db_config(db_type.engine)
-                local('echo "%s" >> %s' % (djang_db_config,
+                print 'Database executable not found. Skipping DB creation part.'
+                django_db_config = generate_django_db_config(db_type.engine)
+                local('echo "%s" >> %s' % (django_db_config,
                                            local_settings_path))
             else:
                 installed_packages = file(packages_file).read()
@@ -135,54 +135,16 @@ def startproject(name):
                 if package_list_updated:
                     local('pip install -r %s' % packages_file)
                 password = db_type.create_db_and_user(name)
-                djang_db_config = generate_django_db_config(db_type.engine,
+                if password:
+                    django_db_config = generate_django_db_config(db_type.engine,
                                                             name, name,
                                                             password)
-                local('echo "%s" >> %s' % (djang_db_config, local_settings_path))
-                local('python %s syncdb' % manage_py_path)
-            return
+                    local('echo "%s" >> %s' % (django_db_config,
+                                               local_settings_path))
+                    local('python %s syncdb' % manage_py_path)
+                else:
+                    print ('Unable to complete DB/User creation.'
+                           'Skipping DB settings update.')
+                    local('echo "%s" >> %s' % (generate_django_db_config(db_type.engine),
+                                               local_settings_path))
             local('python %s collectstatic' % manage_py_path)
-
-"""
-# Server setup
-def setup_server():
-    # install system packages
-    #add_os_package(' '.join(REQUIRED_SYSTEM_PACKAGES))
-    setup_db_server()
-
-
-def setup_db(name):
-    db_type_class = select_db_type()
-    db_type = db_type_class()
-    db_type.create_db_and_user(name)
-    return
-    text = ['Before setting up database you must select its type']
-    [text.append('%s [%s]' % pair) for pair in AVAILABLE_DB_MODULES]
-    text.append('Please enter your choice:')
-    val = r'^(%s)$' %  '|'.join([pair[1] for pair in AVAILABLE_DB_MODULES])
-    db_package_name = prompt('\n'.join(text), validate=val, default=AVAILABLE_DB_MODULES[0][1])  
-    db_package = __import__('db.%s' % db_package_name, fromlist=['create_db_and_user'])
-    db_package.create_db_and_user(name)
-
-
-def update_project():
-    # git pull origin master
-    # copy server files
-    # sync db
-    # collect static files
-    # reload nginx config
-    # restart uwsgi server
-
-
-def deploy(git_repo):
-    # create virtual env 
-    # git add origin git_repo
-    update_project()
-"""
-
-def arg_test(a, b=None, c=None):
-    print a, b, c
-
-def test2():
-    import sys
-    print sys.real_prefix

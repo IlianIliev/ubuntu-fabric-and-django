@@ -2,16 +2,9 @@ from fabric.api import prompt, local, sudo
 from fabric.contrib.files import exists
 
 AVAILABLE_DB_MODULES = [
-#    'MySQL',
+    'MySQL',
     'PostgreSQL',
 ]
-
-
-DB_CREDENTIALS_INFO_MESSAGE = ("""Database credentials\n"""
-    """Host: %s \n"""
-    """DB name: %s \n"""
-    """User: %s \n"""
-    """Password: %s \n""")
 
 
 class DBTypeBase(object):
