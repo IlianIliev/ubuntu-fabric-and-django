@@ -28,8 +28,7 @@ class DBType(DBTypeBase):
     def create_db(self, name):
         """ Creates database with given name """
         with settings(warn_only=True):
-            result = sudo('psql -c "CREATE DATABASE %s OWNER %s;"' % 
-                          (name, name),
+            result = sudo('psql -c "CREATE DATABASE %s"' % name,
                           user=PGSQL_USER)
         return not result.failed
 
@@ -39,3 +38,10 @@ class DBType(DBTypeBase):
         if password:
             self.create_db(name)
         return password
+
+    def grant_privileges(self, dbname, username):
+        with settings(warn_only=True):
+            result = sudo('psql -c "GRANT ALL PRIVILEGES on DATABASE %s TO %s"'
+                          % (dbname, username),
+                          user=PGSQL_USER)
+        return not result.failed

@@ -1,7 +1,7 @@
 import re, sys, os, inspect
 
 from fabric.api import local, run, sudo, prompt
-from fabric.context_managers import lcd, prefix
+from fabric.context_managers import lcd, prefix, settings
 
 from db import select_db_type
 #from db.mysql import setup_db_server, create_db_and_user
@@ -73,8 +73,7 @@ def create_django_project(name, dest_path=''):
             os.path.join(FABFILE_LOCATION, 'project_template/'),
             name,
             dest_path))
-    local('mkdir %s' % os.path.join(dest_path, 'static'))
-    local('mkdir %s' % os.path.join(dest_path, 'media'))
+    local('mkdir %s' % os.path.join(dest_path, os.pardir, 'media'))
 
 
 def generate_django_db_config(engine='', name='', user='', password='',
@@ -114,37 +113,47 @@ def startproject(name):
             project_root = os.path.join(source_path, name)
             local('mkdir %s' % project_root)
             create_django_project(name, project_root)
-            #create_nginx_files(name, source_path)
+            create_nginx_files(name, source_path)
             manage_py_path = os.path.join(source_path, name, 'manage.py')
             local_settings_path = os.path.join(source_path, name, name, 'settings',
                                                'local.py')
             db_type_class = select_db_type()
-            db_type = db_type_class()
-            if not os.path.exists(db_type.executable_path):
-                print 'Database executable not found. Skipping DB creation part.'
-                django_db_config = generate_django_db_config(db_type.engine)
-                local('echo "%s" >> %s' % (django_db_config,
-                                           local_settings_path))
-            else:
-                installed_packages = file(packages_file).read()
-                package_list_updated = False
-                for package in db_type.required_packages:
-                    if package not in installed_packages:
-                        local('echo "%s" >> %s' % (package, packages_file))
-                        package_list_updated = True
-                if package_list_updated:
-                    local('pip install -r %s' % packages_file)
-                password = db_type.create_db_and_user(name)
-                if password:
-                    django_db_config = generate_django_db_config(db_type.engine,
-                                                            name, name,
-                                                            password)
+            if db_type_class:
+                db_type = db_type_class()
+                if not os.path.exists(db_type.executable_path):
+                    print 'Database executable not found. Skipping DB creation part.'
+                    django_db_config = generate_django_db_config(db_type.engine)
                     local('echo "%s" >> %s' % (django_db_config,
                                                local_settings_path))
-                    local('python %s syncdb' % manage_py_path)
                 else:
-                    print ('Unable to complete DB/User creation.'
-                           'Skipping DB settings update.')
-                    local('echo "%s" >> %s' % (generate_django_db_config(db_type.engine),
+                    installed_packages = file(packages_file).read()
+                    package_list_updated = False
+                    for package in db_type.required_packages:
+                        if package not in installed_packages:
+                            local('echo "%s" >> %s' % (package, packages_file))
+                            package_list_updated = True
+                    if package_list_updated:
+                        local('pip install -r %s' % packages_file)
+                    password = db_type.create_db_and_user(name)
+                    if password:
+                        django_db_config = generate_django_db_config(db_type.engine,
+                                                                name, name,
+                                                                password)
+                        local('echo "%s" >> %s' % (django_db_config,
+                                                   local_settings_path))
+                        grant = db_type.grant_privileges(name, name)
+                        if grant:
+                            local('python %s syncdb' % manage_py_path)
+                        else:
+                            print 'Unable to grant DB privileges'
+                            exit(1)
+                    else:
+                        print ('Unable to complete DB/User creation.'
+                               'Skipping DB settings update.')
+                        local('echo "%s" >> %s' % (generate_django_db_config(db_type.engine),
+                                                   local_settings_path))
+            else:
+                local('echo "%s" >> %s' % (generate_django_db_config(),
                                                local_settings_path))
-            local('python %s collectstatic' % manage_py_path)
+            with settings(warn_only=True):
+                result = local('python %s collectstatic' % manage_py_path)
