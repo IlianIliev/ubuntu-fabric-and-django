@@ -11,10 +11,12 @@ from utils import generate_password, add_os_package
 
 FABFILE_LOCATION = os.path.dirname(inspect.getfile(inspect.currentframe()))
 
-DIRECTORY_NAME_REGEXP = r'^[a-zA-Z_].[\w_-]+$'
 
+# The name of the directory where the version controlled source will reside
 SOURCE_DIRECTORY_NAME = 'src'
 
+
+# System packages required for basic server setup
 REQUIRED_SYSTEM_PACKAGES = [
     'python-pip',
     'gcc',
@@ -27,6 +29,7 @@ REQUIRED_SYSTEM_PACKAGES = [
 ]
 
 
+# Django database configuration template
 DJANGO_DB_CONF = """
 DATABASES = {
     'default': {
@@ -42,8 +45,10 @@ DATABASES = {
 
 
 def check_project_name(name):
-    # this check is copied from the Dajngo core code, as we are running it
-    # before the creation of VE the existing module check is skipped
+    """ Check whether the project name corresponds to the Django project name
+    restrictions. The check is copied from the Dajngo core code. As we are
+    running it before the creation of the virtual environment the check whether
+    the project name matches those of existing module check is skipped """
     if not re.search(r'^[_a-zA-Z]\w*$', name):
         # Provide a smart error message, depending on the error.
         if not re.search(r'^[_a-zA-Z]', name):
@@ -59,16 +64,18 @@ def check_project_name(name):
     return True, ''
 
 
-# Start project part
 def ve_activate_prefix(name):
+    """ Returns the path to the virtual environment activate script """
     return os.path.join(os.getcwd(), name, 'bin', 'activate')
 
 
 def create_virtual_env(name='.'):
+    """ Creates virtual environment with given name """
     local('virtualenv --no-site-packages %s' % name)
 
 
 def create_django_project(name, dest_path=''):
+    """ Creates new Django project using a pre made template """
     local('python ./bin/django-admin.py startproject --template "%s" %s %s' % (
             os.path.join(FABFILE_LOCATION, 'project_template/'),
             name,
@@ -78,10 +85,12 @@ def create_django_project(name, dest_path=''):
 
 def generate_django_db_config(engine='', name='', user='', password='',
                               host='', port=''):
+    """ Returns database configuration template with filled values """
     return DJANGO_DB_CONF % (engine, name, user, password, host, port)
 
 
 def create_nginx_files(project_name, project_path):
+    """ Create nginx local configuration file for the project """
     with file(os.path.join(FABFILE_LOCATION, 'nginx.local.conf')
               ) as nginx_local_template:
         nginx_local_content = nginx_local_template.read()
@@ -95,6 +104,11 @@ def create_nginx_files(project_name, project_path):
 
 
 def startproject(name):
+    """Creates new virtual environment, installs Django and creates new project
+    with the specified name. Prompts the user to choose DB engine and tries
+    to setup database/user with the project name and random password and
+    updates local settings according to the choosen database. Also creates
+    nginx conf file for local usage"""
     check, message = check_project_name(name)
     if not check:
         print message
