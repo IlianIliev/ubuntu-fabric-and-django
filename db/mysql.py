@@ -55,3 +55,11 @@ class DBType(DBTypeBase):
             return password
         else:
             return False
+
+    def install(self):
+        password = generate_password()
+        sudo('debconf-set-selections <<< "mysql-server-5.5 mysql-server/root_password password %s"' % password)
+        sudo('debconf-set-selections <<< "mysql-server-5.5 mysql-server/root_password_again password %s"' % password)
+        add_os_package('mysql-server')
+        local('touch passwords')
+        return password

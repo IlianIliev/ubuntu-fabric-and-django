@@ -1,5 +1,6 @@
 #python packages
+uWSGI
 
 #django packages
 Django==1.4
-#south
+south

@@ -1,12 +1,12 @@
 import re, sys, os, inspect
 
-from fabric.api import local, run, sudo, prompt
-from fabric.context_managers import lcd, prefix, settings
+from fabric.api import env, local, run, sudo, prompt
+from fabric.context_managers import cd, lcd, prefix, settings
 
 from db import select_db_type
 #from db.mysql import setup_db_server, create_db_and_user
 
-from utils import generate_password, add_os_package
+from utils import generate_password, add_os_package, create_virtual_env, add_user
 
 
 FABFILE_LOCATION = os.path.dirname(inspect.getfile(inspect.currentframe()))
@@ -26,6 +26,7 @@ REQUIRED_SYSTEM_PACKAGES = [
     'git',
     'nginx',
     'python-virtualenv',
+    'libxml2-dev',
 ]
 
 
@@ -69,11 +70,6 @@ def ve_activate_prefix(name):
     return os.path.join(os.getcwd(), name, 'bin', 'activate')
 
 
-def create_virtual_env(name='.'):
-    """ Creates virtual environment with given name """
-    local('virtualenv --no-site-packages %s' % name)
-
-
 def create_django_project(name, dest_path=''):
     """ Creates new Django project using a pre made template """
     local('python ./bin/django-admin.py startproject --template "%s" %s %s' % (
@@ -91,8 +87,8 @@ def generate_django_db_config(engine='', name='', user='', password='',
 
 def create_nginx_files(project_name, project_path):
     """ Create nginx local configuration file for the project """
-    with file(os.path.join(FABFILE_LOCATION, 'nginx.local.conf')
-              ) as nginx_local_template:
+    with file(os.path.join(FABFILE_LOCATION, 'project_files',
+                           'nginx.local.conf')) as nginx_local_template:
         nginx_local_content = nginx_local_template.read()
     nginx_local_content = nginx_local_content.replace('%%%project_name%%%',
                                                       project_name).\
@@ -101,6 +97,15 @@ def create_nginx_files(project_name, project_path):
     with file(os.path.join(project_path, '%s.nginx.local.conf' % project_name),
               'w+') as project_nginx_local:
         project_nginx_local.write(nginx_local_content)
+
+
+def init_git_repository(source_path):
+    with lcd(source_path):
+        local('git init')
+        local('cp %s %s' % (os.path.join(FABFILE_LOCATION,
+                                             'project_files',
+                                             'gitignore_base'),
+                            os.path.join(source_path, '.gitignore')))
 
 
 def startproject(name):
@@ -113,7 +118,7 @@ def startproject(name):
     if not check:
         print message
         exit(1)
-    create_virtual_env(name)
+    create_virtual_env(name, True)
     source_path = os.path.abspath(os.path.join(name, SOURCE_DIRECTORY_NAME))
     local('mkdir %s' % source_path)
     with lcd(name):
@@ -121,6 +126,7 @@ def startproject(name):
             packages_file = os.path.join(source_path,
                                          'required_packages.txt')
             local('cp %s %s' % (os.path.join(FABFILE_LOCATION,
+                                             'project_files',
                                              'required_packages.txt'),
                                 packages_file))
             local('pip install -r %s' % packages_file)
@@ -128,9 +134,10 @@ def startproject(name):
             local('mkdir %s' % project_root)
             create_django_project(name, project_root)
             create_nginx_files(name, source_path)
+            init_git_repository(source_path)
             manage_py_path = os.path.join(source_path, name, 'manage.py')
-            local_settings_path = os.path.join(source_path, name, name, 'settings',
-                                               'local.py')
+            local_settings_path = os.path.join(source_path, name, name,
+                                               'settings', 'local.py')
             db_type_class = select_db_type()
             if db_type_class:
                 db_type = db_type_class()
@@ -171,3 +178,22 @@ def startproject(name):
                                                local_settings_path))
             with settings(warn_only=True):
                 result = local('python %s collectstatic' % manage_py_path)
+
+
+def setup_server():
+    #sudo('apt-get update')
+    #add_os_package(' '.join(REQUIRED_SYSTEM_PACKAGES))
+    server_setup_info = ['-'*80, 'Server setup for %s' % env.host]
+    password = add_user('www', True)
+    if password:
+        server_setup_info.append('www user password: %s' % password)
+    db_type_class = select_db_type()
+    if db_type_class:
+        db = db_type_class()
+        if not db.is_db_installed():
+            db_password = db.install()
+            server_setup_info.append('Database Root Password: %s' % db_password)
+        else:
+            print 'Database already installed'
+
+    print server_setup_info

@@ -38,6 +38,10 @@ class DBTypeBase(object):
         engine is installed. """
         return exists(self.executable_path)
 
+    def install(self):
+        """ Install the specified database type. """
+        raise NotImplementedError
+
 
 def import_module(name):
     """ Accepts package path and return the imported class. This is used to

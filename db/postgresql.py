@@ -2,8 +2,7 @@ from fabric.api import sudo, local, env
 from fabric.context_managers import settings
 
 from db import DBTypeBase
-from utils import generate_password
-
+from utils import generate_password, add_os_package
 
 PGSQL_USER = 'postgres'
 POSTGRESQL_EXECUTABLE_PATH = '/usr/bin/psql'
@@ -45,3 +44,8 @@ class DBType(DBTypeBase):
                           % (dbname, username),
                           user=PGSQL_USER)
         return not result.failed
+
+    def install(self):
+        password = generate_password()
+        add_os_package('postgresql')
+        return password
