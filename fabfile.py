@@ -2,6 +2,8 @@ import re, sys, os, inspect
 
 from fabric.api import env, local, run, sudo, prompt
 from fabric.context_managers import cd, lcd, prefix, settings
+from fabric.contrib.console import confirm
+from fabric.contrib.files import exists
 
 from db import select_db_type
 #from db.mysql import setup_db_server, create_db_and_user
@@ -14,6 +16,11 @@ FABFILE_LOCATION = os.path.dirname(inspect.getfile(inspect.currentframe()))
 
 # The name of the directory where the version controlled source will reside
 SOURCE_DIRECTORY_NAME = 'src'
+
+PRODUCTION_USER = 'www'
+PRODUCTION_WORKSPACE_PATH = os.path.join(os.sep, 'home', PRODUCTION_USER)
+
+SETTINGS_TYPES = ['development', 'production']
 
 
 # System packages required for basic server setup
@@ -85,25 +92,55 @@ def generate_django_db_config(engine='', name='', user='', password='',
     return DJANGO_DB_CONF % (engine, name, user, password, host, port)
 
 
-def create_nginx_files(project_name, project_path):
-    """ Create nginx local configuration file for the project """
-    with file(os.path.join(FABFILE_LOCATION, 'project_files',
-                           'nginx.local.conf')) as nginx_local_template:
-        nginx_local_content = nginx_local_template.read()
-    nginx_local_content = nginx_local_content.replace('%%%project_name%%%',
-                                                      project_name).\
-                                              replace('%%%project_path%%%',
-                                                      project_path)
-    with file(os.path.join(project_path, '%s.nginx.local.conf' % project_name),
-              'w+') as project_nginx_local:
-        project_nginx_local.write(nginx_local_content)
+def create_uwsgi_files(project_name, project_path, server_type='development'):
+    project_path = os.path.abspath(project_path)
+    source_path = os.path.join(project_path, SOURCE_DIRECTORY_NAME)
+    project_home = os.path.join(source_path, project_name)
+    uwsgi_templates_dir = os.path.join(FABFILE_LOCATION, 'project_settings')
+    uwsgi_templates = [os.path.join(uwsgi_templates_dir, 'nginx.uwsgi.conf'),
+                       os.path.join(uwsgi_templates_dir,
+                                    'uwsgi.%s.conf' % server_type)]
+    if server_type=='development':
+        uwsgi_templates.append(os.path.join(uwsgi_templates_dir,
+                                            'nginx.development.conf'))
+
+    project_files = [os.path.join(source_path,
+                                  '%s.nginx.uwsgi.%s.conf' % \
+                                    (project_name, server_type)),
+                     os.path.join(source_path,
+                                  '%s.uwsgi.%s.conf' % \
+                                    (project_name, server_type))]
+    if server_type=='development':
+        project_files.append(os.path.join(source_path,
+                                          'nginx.development.conf'))
+        
+    for t, r in zip(uwsgi_templates, project_files):
+        if exists(r):
+            if not confirm('File %s already exists, proceeding with this task '
+                           'will overwrite it' % r):
+                continue
+        with open(t) as template:
+            content = template.read()
+            content = content.replace('%%%project_name%%%',
+                                              project_name). \
+                                    replace('%%%source_path%%%', source_path). \
+                                    replace('%%%project_home%%%', project_home). \
+                                    replace('%%%project_path%%%', project_path)
+        with open(r, 'w+') as rf:
+            rf.write(content)
+    return True
+
+
+def create_production_uwsgi_files(project_name):
+    project_path = os.path.join(PRODUCTION_WORKSPACE_PATH, project_name)
+    return create_uwsgi_files(project_name, project_path, 'production')
 
 
 def init_git_repository(source_path):
     with lcd(source_path):
         local('git init')
         local('cp %s %s' % (os.path.join(FABFILE_LOCATION,
-                                             'project_files',
+                                             'project_settings',
                                              'gitignore_base'),
                             os.path.join(source_path, '.gitignore')))
 
@@ -119,21 +156,23 @@ def startproject(name):
         print message
         exit(1)
     create_virtual_env(name, True)
-    source_path = os.path.abspath(os.path.join(name, SOURCE_DIRECTORY_NAME))
+    ve_path = os.path.abspath(name)
+    source_path = os.path.join(ve_path, SOURCE_DIRECTORY_NAME)
     local('mkdir %s' % source_path)
     with lcd(name):
         with prefix('. %s' % ve_activate_prefix(name)):
             packages_file = os.path.join(source_path,
                                          'required_packages.txt')
             local('cp %s %s' % (os.path.join(FABFILE_LOCATION,
-                                             'project_files',
+                                             'project_settings',
                                              'required_packages.txt'),
                                 packages_file))
             local('pip install -r %s' % packages_file)
             project_root = os.path.join(source_path, name)
             local('mkdir %s' % project_root)
             create_django_project(name, project_root)
-            create_nginx_files(name, source_path)
+            create_uwsgi_files(name, ve_path)
+            create_production_uwsgi_files(name)
             init_git_repository(source_path)
             manage_py_path = os.path.join(source_path, name, 'manage.py')
             local_settings_path = os.path.join(source_path, name, name,
@@ -184,7 +223,7 @@ def setup_server():
     #sudo('apt-get update')
     #add_os_package(' '.join(REQUIRED_SYSTEM_PACKAGES))
     server_setup_info = ['-'*80, 'Server setup for %s' % env.host]
-    password = add_user('www', True)
+    password = add_user(PRODUCTION_USER, True)
     if password:
         server_setup_info.append('www user password: %s' % password)
     db_type_class = select_db_type()
