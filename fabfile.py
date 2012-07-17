@@ -8,7 +8,7 @@ from fabric.contrib.files import exists
 from db import select_db_type
 #from db.mysql import setup_db_server, create_db_and_user
 
-from utils import generate_password, add_os_package, create_virtual_env, add_user
+from utils import generate_password, add_os_package, create_virtual_env, add_user, replace_in_template
 
 
 FABFILE_LOCATION = os.path.dirname(inspect.getfile(inspect.currentframe()))
@@ -80,7 +80,7 @@ def ve_activate_prefix(name):
 def create_django_project(name, dest_path=''):
     """ Creates new Django project using a pre made template """
     local('python ./bin/django-admin.py startproject --template "%s" %s %s' % (
-            os.path.join(FABFILE_LOCATION, 'project_template/'),
+            os.path.join(FABFILE_LOCATION, 'django_template/'),
             name,
             dest_path))
     local('mkdir %s' % os.path.join(dest_path, os.pardir, 'media'))
@@ -92,48 +92,54 @@ def generate_django_db_config(engine='', name='', user='', password='',
     return DJANGO_DB_CONF % (engine, name, user, password, host, port)
 
 
-def create_uwsgi_files(project_name, project_path, server_type='development'):
+def create_uwsgi_files(project_name, project_path):
+    if not project_path:
+        project_path = dest_path
     project_path = os.path.abspath(project_path)
     source_path = os.path.join(project_path, SOURCE_DIRECTORY_NAME)
-    project_home = os.path.join(source_path, project_name)
+
     uwsgi_templates_dir = os.path.join(FABFILE_LOCATION, 'project_settings')
+    # the last template in the line is only for local development purposes
     uwsgi_templates = [os.path.join(uwsgi_templates_dir, 'nginx.uwsgi.conf'),
                        os.path.join(uwsgi_templates_dir,
-                                    'uwsgi.%s.conf' % server_type)]
-    if server_type=='development':
-        uwsgi_templates.append(os.path.join(uwsgi_templates_dir,
-                                            'nginx.development.conf'))
+                                    'uwsgi.conf'),
+                       os.path.join(uwsgi_templates_dir,
+                                    'nginx.local.conf')]
 
-    project_files = [os.path.join(source_path,
-                                  '%s.nginx.uwsgi.%s.conf' % \
-                                    (project_name, server_type)),
-                     os.path.join(source_path,
-                                  '%s.uwsgi.%s.conf' % \
-                                    (project_name, server_type))]
-    if server_type=='development':
-        project_files.append(os.path.join(source_path,
-                                          'nginx.development.conf'))
-        
-    for t, r in zip(uwsgi_templates, project_files):
-        if exists(r):
-            if not confirm('File %s already exists, proceeding with this task '
-                           'will overwrite it' % r):
-                continue
-        with open(t) as template:
-            content = template.read()
-            content = content.replace('%%%project_name%%%',
-                                              project_name). \
-                                    replace('%%%source_path%%%', source_path). \
-                                    replace('%%%project_home%%%', project_home). \
-                                    replace('%%%project_path%%%', project_path)
-        with open(r, 'w+') as rf:
-            rf.write(content)
-    return True
+    def _generate_files(input_files, output_path, data):
+        for file_path in input_files:
+            file_name = os.path.basename(file_path)
+            with open(file_path) as template:
+                output = replace_in_template(template.read(), data)
+            output_file_name = '%s.%s.%s' % (data['project_name'],
+                                             data['env_type'],
+                                             file_name)
+            output_file_path = os.path.join(output_path, output_file_name)
+            if exists(output_file_path):
+                if not confirm('File %s already exists, proceeding with this '
+                               'task will overwrite it' % output_file_path):
+                    continue
+            with open(output_file_path, 'w+') as output_file:
+                output_file.write(output)
 
+    development_data = {'project_path': os.path.abspath(project_path),
+                        'source_path': source_path,
+                        'project_home': os.path.join(source_path,
+                                                     project_name),
+                        'env_type': 'development',
+                        'project_name': project_name}
+    _generate_files(uwsgi_templates, source_path, development_data)
 
-def create_production_uwsgi_files(project_name):
-    project_path = os.path.join(PRODUCTION_WORKSPACE_PATH, project_name)
-    return create_uwsgi_files(project_name, project_path, 'production')
+    production_project_path = os.path.abspath(os.path.join(
+                                        PRODUCTION_WORKSPACE_PATH,project_name))
+    production_data = {'project_path': os.path.abspath(production_project_path),
+                       'source_path': os.path.join(production_project_path,
+                                                   SOURCE_DIRECTORY_NAME),
+                       'project_home': os.path.join(production_project_path,
+                                                    project_name),
+                       'env_type': 'production',
+                       'project_name': project_name}
+    _generate_files(uwsgi_templates[:-1], source_path, production_data)
 
 
 def init_git_repository(source_path):
@@ -172,7 +178,6 @@ def startproject(name):
             local('mkdir %s' % project_root)
             create_django_project(name, project_root)
             create_uwsgi_files(name, ve_path)
-            create_production_uwsgi_files(name)
             init_git_repository(source_path)
             manage_py_path = os.path.join(source_path, name, 'manage.py')
             local_settings_path = os.path.join(source_path, name, name,

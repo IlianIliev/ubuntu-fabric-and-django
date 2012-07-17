@@ -143,3 +143,5 @@ LOGGING = {
         },
     }
 }
+
+from {{ project_name }}.settings.local import *

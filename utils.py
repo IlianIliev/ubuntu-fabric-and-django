@@ -32,3 +32,9 @@ def create_virtual_env(name='.', run_locally=False):
     """ Creates virtual environment with given name """
     runner = local if run_locally else run
     runner('virtualenv --no-site-packages %s' % name)
+
+
+def replace_in_template(input, data={}):
+    for var in data:
+        input = input.replace('%%%%%%%s%%%%%%' % var, data[var])
+    return input
