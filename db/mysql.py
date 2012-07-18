@@ -22,6 +22,7 @@ GRANT_PRIVILEGES_QUERY = """echo 'grant all privileges on %s.* to "%s"@"localhos
 class DBType(DBTypeBase):
     def __init__(self, *args, **kwargs):
         self.engine = 'mysql'
+        self.required_system_packages = ['libmysqlclient-dev']
         self.required_packages = ['MySQL-python']
         self.executable_path = MYSQL_EXECUTABLE_PATH
 
@@ -57,6 +58,9 @@ class DBType(DBTypeBase):
             return False
 
     def install(self):
+        if self.is_db_installed():
+            print 'Database already installed'
+            return
         password = generate_password()
         sudo('debconf-set-selections <<< "mysql-server-5.5 mysql-server/root_password password %s"' % password)
         sudo('debconf-set-selections <<< "mysql-server-5.5 mysql-server/root_password_again password %s"' % password)

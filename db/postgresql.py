@@ -46,6 +46,7 @@ class DBType(DBTypeBase):
         return not result.failed
 
     def install(self):
-        password = generate_password()
+        if self.is_db_installed():
+            print 'Database already installed'
+            return
         add_os_package('postgresql')
-        return password

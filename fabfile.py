@@ -34,6 +34,7 @@ REQUIRED_SYSTEM_PACKAGES = [
     'nginx',
     'python-virtualenv',
     'libxml2-dev',
+    'ia32-libs', # this packages fixes the following uwsgi error -> ibgcc_s.so.1 must be installed for pthread_cancel to work 
 ]
 
 
@@ -228,21 +229,20 @@ def startproject(name):
                 result = local('python %s collectstatic' % manage_py_path)
 
 
-def setup_server():
+def setup_server(local=False):
     """ WARNING: under development """
-    #sudo('apt-get update')
-    #add_os_package(' '.join(REQUIRED_SYSTEM_PACKAGES))
+    with settings(warn_only=True):
+        sudo('apt-get update')
+    add_os_package(' '.join(REQUIRED_SYSTEM_PACKAGES))
     server_setup_info = ['-'*80, 'Server setup for %s' % env.host]
-    password = add_user(PRODUCTION_USER, True)
-    if password:
-        server_setup_info.append('www user password: %s' % password)
+    if not local:
+        password = add_user(PRODUCTION_USER, True)
+        if password:
+            server_setup_info.append('www user password: %s' % password)
     db_type_class = select_db_type()
     if db_type_class:
         db = db_type_class()
-        if not db.is_db_installed():
-            db_password = db.install()
+        db_password = db.install()
+        if db_password:
             server_setup_info.append('Database Root Password: %s' % db_password)
-        else:
-            print 'Database already installed'
-
     print server_setup_info
