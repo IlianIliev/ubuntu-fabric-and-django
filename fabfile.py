@@ -93,6 +93,9 @@ def generate_django_db_config(engine='', name='', user='', password='',
 
 
 def create_uwsgi_files(project_name, project_path):
+    """ Creates the uwsgi and nginx configuration files for development and
+    production environment. The uwsgi script file is ment to be run using
+    upstart """
     if not project_path:
         project_path = dest_path
     project_path = os.path.abspath(project_path)
@@ -143,7 +146,8 @@ def create_uwsgi_files(project_name, project_path):
 
 
 def init_git_repository(source_path):
-    with lcd(source_path):
+    """ Goes to the source path and initiales GIT repository there """
+    with lcd(os.path.abspath(source_path)):
         local('git init')
         local('cp %s %s' % (os.path.join(FABFILE_LOCATION,
                                              'project_settings',
@@ -225,6 +229,7 @@ def startproject(name):
 
 
 def setup_server():
+    """ WARNING: under development """
     #sudo('apt-get update')
     #add_os_package(' '.join(REQUIRED_SYSTEM_PACKAGES))
     server_setup_info = ['-'*80, 'Server setup for %s' % env.host]
