@@ -34,7 +34,7 @@ REQUIRED_SYSTEM_PACKAGES = [
     'nginx',
     'python-virtualenv',
     'libxml2-dev',
-    'ia32-libs', # this packages fixes the following uwsgi error -> ibgcc_s.so.1 must be installed for pthread_cancel to work 
+    #'ia32-libs', # this packages fixes the following uwsgi error -> ibgcc_s.so.1 must be installed for pthread_cancel to work 
 ]
 
 
@@ -140,6 +140,7 @@ def create_uwsgi_files(project_name, project_path):
                        'source_path': os.path.join(production_project_path,
                                                    SOURCE_DIRECTORY_NAME),
                        'project_home': os.path.join(production_project_path,
+                                                    SOURCE_DIRECTORY_NAME,
                                                     project_name),
                        'env_type': 'production',
                        'project_name': project_name}
@@ -162,6 +163,9 @@ def startproject(name):
     to setup database/user with the project name and random password and
     updates local settings according to the choosen database. Also creates
     nginx conf file for local usage"""
+    if env['host'] not in ['127.0.0.1', 'localhost']:
+        print 'This task can be executed only on localhost'
+        return
     check, message = check_project_name(name)
     if not check:
         print message
@@ -245,4 +249,58 @@ def setup_server(local=False):
         db_password = db.install()
         if db_password:
             server_setup_info.append('Database Root Password: %s' % db_password)
+    # restart required here???
     print server_setup_info
+
+
+def generate_local_config(name, local_settings_path):
+    db_type_class = select_db_type()
+    if db_type_class:
+        db_type = db_type_class()
+        if not os.path.exists(db_type.executable_path):
+            print 'Database executable not found. Skipping DB creation part.'
+            return False
+        else:
+            password = db_type.create_db_and_user(name)
+            if password:
+                django_db_config = generate_django_db_config(db_type.engine,
+                                                        name, name,
+                                                        password)
+                run('echo "%s" >> %s' % (django_db_config,
+                                           local_settings_path))
+                grant = db_type.grant_privileges(name, name)
+                if grant:
+                    return True
+                else:
+                    print 'Unable to grant DB privileges'
+                    return False
+            else:
+                print ('Unable to complete DB/User creation.'
+                       'Skipping DB settings update.')
+                return False
+
+
+def deploy_project(name, repo):
+    create_virtual_env(name)
+    with cd(name):
+        run('mkdir %s' % SOURCE_DIRECTORY_NAME)
+        with cd(SOURCE_DIRECTORY_NAME):
+            run('git clone %s .' % repo)
+            with prefix('. ../bin/activate'):
+                run('pip install -r required_packages.txt')
+            source_path = run('pwd')
+            nginx_uwsgi_conf_name = '%s.production.nginx.uwsgi' % name
+            uwsgi_conf_name = '%s.production.uwsgi' % name
+            with settings(warn_only=True):
+                sudo('ln -s %s.conf /etc/nginx/sites-enabled/' % os.path.join(source_path,
+                                                                         nginx_uwsgi_conf_name))
+                sudo('ln -s %s.conf /etc/init/' % os.path.join(source_path,
+                                                           uwsgi_conf_name))
+            local_settings_path = os.path.join(source_path, name, name,
+                                               'settings', 'local.py')
+            if generate_local_config(name, local_settings_path):
+                # syncdb
+                # migrate
+                sudo('initctl reload-configuration')
+                sudo('initctl start %s' % uwsgi_conf_name)
+                sudo('/etc/init.d/nginx restart')

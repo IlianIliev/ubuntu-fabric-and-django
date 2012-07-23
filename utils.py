@@ -1,7 +1,7 @@
 import string
 import random
 
-from fabric.api import local, sudo
+from fabric.api import local, run, sudo
 from fabric.context_managers import settings
 
 
