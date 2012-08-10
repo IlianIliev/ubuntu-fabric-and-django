@@ -97,7 +97,8 @@ ROOT_URLCONF = '{{ project_name }}.urls'
 WSGI_APPLICATION = 'wsgi.application'
 
 TEMPLATE_DIRS = (
-    os.path.join(PROJECT_PATH, '{{ project_name }}', 'templates', ),
+    os.path.join(PROJECT_PATH, '{{ project_name }}', 'templates',
+                 '{{ project_name }}'),
 )
 
 INSTALLED_APPS = (
