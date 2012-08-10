@@ -17,7 +17,7 @@ FABFILE_LOCATION = os.path.dirname(inspect.getfile(inspect.currentframe()))
 # The name of the directory where the version controlled source will reside
 SOURCE_DIRECTORY_NAME = 'src'
 
-PRODUCTION_USER = 'www'
+PRODUCTION_USER = 'ubuntu'
 PRODUCTION_WORKSPACE_PATH = os.path.join(os.sep, 'home', PRODUCTION_USER)
 
 SETTINGS_TYPES = ['development', 'production']
@@ -93,12 +93,12 @@ def generate_django_db_config(engine='', name='', user='', password='',
     return DJANGO_DB_CONF % (engine, name, user, password, host, port)
 
 
-def create_uwsgi_files(project_name, project_path):
+def create_uwsgi_files(project_name, project_path=None):
     """ Creates the uwsgi and nginx configuration files for development and
     production environment. The uwsgi script file is ment to be run using
     upstart """
     if not project_path:
-        project_path = dest_path
+        project_path = os.path.join(project_name)
     project_path = os.path.abspath(project_path)
     source_path = os.path.join(project_path, SOURCE_DIRECTORY_NAME)
 
@@ -239,18 +239,18 @@ def setup_server(local=False):
         sudo('apt-get update')
     add_os_package(' '.join(REQUIRED_SYSTEM_PACKAGES))
     server_setup_info = ['-'*80, 'Server setup for %s' % env.host]
-    if not local:
-        password = add_user(PRODUCTION_USER, True)
-        if password:
-            server_setup_info.append('www user password: %s' % password)
+    #if not local:
+    #    password = add_user(PRODUCTION_USER, True)
+    #    if password:
+    #        server_setup_info.append('www user password: %s' % password)
     db_type_class = select_db_type()
     if db_type_class:
         db = db_type_class()
         db_password = db.install()
         if db_password:
             server_setup_info.append('Database Root Password: %s' % db_password)
-    # restart required here???
-    print server_setup_info
+    sudo('reboot') # FIX ME: add check for is reboot required
+    print '\n'.join(server_setup_info)
 
 
 def generate_local_config(name, local_settings_path):
@@ -283,6 +283,8 @@ def generate_local_config(name, local_settings_path):
 def deploy_project(name, repo):
     create_virtual_env(name)
     with cd(name):
+        env['cwd']
+        exit()
         run('mkdir %s' % SOURCE_DIRECTORY_NAME)
         with cd(SOURCE_DIRECTORY_NAME):
             run('git clone %s .' % repo)
@@ -299,6 +301,9 @@ def deploy_project(name, repo):
             local_settings_path = os.path.join(source_path, name, name,
                                                'settings', 'local.py')
             if generate_local_config(name, local_settings_path):
+                activate_prefix = os.path.join('/', 'home', SERVER_USER, 'bin', 'activate')
+                with prefix(activate_prefix):
+                    run('python manage')
                 # syncdb
                 # migrate
                 sudo('initctl reload-configuration')
