@@ -28,6 +28,10 @@ fab -H <user>@<server> -f <fabfile_path> deploy_project:<project_name>,<env_type
 
 Where env_type can be development or production
 
+Updating existing project
+
+fab -H <user>@<server> -f <fabfile_path> update_project:<project_name>,<env_type>
+
 
 Dependencies:
 =============
