@@ -1,0 +1,43 @@
+===========
+Ubuntu, Fabric & Django
+===========
+
+This is a package of fabric tasks built to automate the creation of new Django
+projects, the server setup and deployment of the applications.
+
+The application is working under virtual environment using uWSGI and the NginX
+webserver.
+
+Currently supported databases: MySQL, PostgreSQL
+
+Tested with Ubuntu 11.10
+Not working with 12.04 due to uwsgi issue
+
+
+Usage:
+======
+Starting new project
+fab -H localhost -f <fabfile_path> startproject:<project_name>
+
+Setting up new server
+fab -H <user>@<server> -f <fabfile_path> setup_server
+
+Deploying new project
+
+fab -H <user>@<server> -f <fabfile_path> deploy_project:<project_name>,<env_type>,<repo>
+
+Where env_type can be development or production
+
+
+Dependencies:
+=============
+
+Simple Site Checker depends on the following modules:
+* argparse
+* lxml
+
+
+Feel free to add any issues, bug reports, comments or advices to
+https://github.com/IlianIliev/Simple-Site-Checker
+ or
+http://ilian.i-n-i.org/simple-site-checker/

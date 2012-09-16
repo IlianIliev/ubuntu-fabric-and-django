@@ -1,6 +1,6 @@
-import re, sys, os, inspect
+import re, os, inspect
 
-from fabric.api import env, local, run, sudo, prompt
+from fabric.api import env, local, run, sudo
 from fabric.context_managers import cd, lcd, prefix, settings
 from fabric.contrib.console import confirm
 from fabric.contrib.files import exists
@@ -8,7 +8,10 @@ from fabric.contrib.files import exists
 from db import select_db_type
 #from db.mysql import setup_db_server, create_db_and_user
 
-from utils import generate_password, add_os_package, create_virtual_env, add_user, replace_in_template
+from utils import add_os_package, create_virtual_env, replace_in_template
+
+
+VERSION = '0.1'
 
 
 FABFILE_LOCATION = os.path.dirname(inspect.getfile(inspect.currentframe()))
@@ -229,8 +232,7 @@ def startproject(name):
             else:
                 local('echo "%s" >> %s' % (generate_django_db_config(),
                                                local_settings_path))
-            with settings(warn_only=True):
-                result = local('python %s collectstatic' % manage_py_path)
+            local('python %s collectstatic --noinput' % manage_py_path)
 
 
 def setup_server(local=False):
@@ -278,34 +280,56 @@ def generate_local_config(name, local_settings_path):
                 print ('Unable to complete DB/User creation.'
                        'Skipping DB settings update.')
                 return False
+    else:
+        print 'No database selected, skipping DB settings update'
+        return True
 
 
-def deploy_project(name, repo):
-    create_virtual_env(name)
-    with cd(name):
-        env['cwd']
-        exit()
+def update_project(project_name, env_type):
+    """ Updates the source files, and then consecutively runs syncdb, migrate
+    and collectstatic. The env_type argument shows the environment type
+    development/production/etc."""
+    user_home_path = run('echo $HOME')
+    project_path = os.path.join(user_home_path, project_name)
+    activate_prefix = '. %s' % os.path.join(project_path, 'bin', 'activate')
+    source_path = os.path.join(project_path, SOURCE_DIRECTORY_NAME) 
+    with cd(source_path):
+        run('git pull origin master')
+        with prefix(activate_prefix):
+            run('pip install -r required_packages.txt')
+            with cd(project_name):
+                run('python manage.py syncdb')
+                run('python manage.py migrate')
+                run('python manage.py collectstatic --noinput')
+    uwsgi_conf_name = '%s.%s.uwsgi' % (project_name, env_type)
+    sudo('initctl reload-configuration')
+    with settings(warn_only=True):
+        result = sudo('initctl restart %s' % uwsgi_conf_name)
+        if result.failed:
+            result = sudo('initctl start %s' % uwsgi_conf_name)
+            if result.failed:
+                print 'Failed to restart/start job %s' % uwsgi_conf_name
+    sudo('/etc/init.d/nginx restart')
+
+
+def deploy_project(project_name, env_type, repo):
+    """ Deploys project to remote server, requires project name, environment
+    type(development/production) and the repository of the project """
+    create_virtual_env(project_name)
+    with cd(project_name):
         run('mkdir %s' % SOURCE_DIRECTORY_NAME)
         with cd(SOURCE_DIRECTORY_NAME):
             run('git clone %s .' % repo)
-            with prefix('. ../bin/activate'):
-                run('pip install -r required_packages.txt')
             source_path = run('pwd')
-            nginx_uwsgi_conf_name = '%s.production.nginx.uwsgi' % name
-            uwsgi_conf_name = '%s.production.uwsgi' % name
+            nginx_uwsgi_conf_name = '%s.production.nginx.uwsgi' % project_name
+            uwsgi_conf_name = '%s.production.uwsgi' % project_name
             with settings(warn_only=True):
                 sudo('ln -s %s.conf /etc/nginx/sites-enabled/' % os.path.join(source_path,
                                                                          nginx_uwsgi_conf_name))
                 sudo('ln -s %s.conf /etc/init/' % os.path.join(source_path,
                                                            uwsgi_conf_name))
-            local_settings_path = os.path.join(source_path, name, name,
-                                               'settings', 'local.py')
-            if generate_local_config(name, local_settings_path):
-                activate_prefix = os.path.join('/', 'home', SERVER_USER, 'bin', 'activate')
-                with prefix(activate_prefix):
-                    run('python manage')
-                # syncdb
-                # migrate
-                sudo('initctl reload-configuration')
-                sudo('initctl start %s' % uwsgi_conf_name)
-                sudo('/etc/init.d/nginx restart')
+            local_settings_path = os.path.join(source_path, project_name,
+                                               project_name, 'settings',
+                                               'local.py')
+            if generate_local_config(project_name, local_settings_path):
+                update_project(project_name, env_type)
